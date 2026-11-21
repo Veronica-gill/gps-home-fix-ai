@@ -6,19 +6,28 @@ A working Node.js application integrating the OpenAI API into a home-repair busi
 
 I built GPS Home Fix for Gill Property Services, a family home-repair business in Pensacola, Florida. A request with a description and photos needs to become an estimate I can review and a work order the technician can use on a phone. The application keeps the request, approval, assignment, and work history together.
 
-> **Repository review draft.** The working application described here is documented in the build record. The secured source export, fresh test results, and synthetic screenshots are pending for this review copy.
+## Working application
+
+A fictional door repair follows the same workflow as a local job. The AI recommendation shown here came from a simulated OpenAI response.
+
+**Owner job review**
+
+![The saved repair request, synthetic photo, and structured recommendation](docs/screenshots/01-owner-job-analysis.png)
+
+**Approved estimate and assignment**
+
+![The owner's approved estimate and technician assignment](docs/screenshots/02-approved-estimate.png)
+
+**Technician work order**
+
+![Phone-width work order with tasks, tools, materials, and completion controls](docs/screenshots/03-technician-mobile.png)
 
 ## What the application does
 
-- Sends repair descriptions and optional photos to the OpenAI API from the Node.js server. The original MVP run verified live analysis with a synthetic image.
-- Uses the analysis to help prepare an estimate for owner review. The owner controls approval and assignment.
-- Gives the owner access to jobs, photos, estimates, assignments, and activity history.
-- Gives the technician a phone-width view of assigned, approved work orders and a way to report completion. The secured-branch walkthrough recorded that removing an assignment revoked access through a previously saved link.
-- Uses SQLite for local job and activity records. The secured-branch restore check recorded successful recovery of the job, its photo, the assignment, and the activity history.
-
-## Application screenshots
-
-The proposed captures are the owner’s repair request with simulated analysis and a fictional photo, the estimate approval and assignment screen, and the technician’s assigned work order at phone width. Capture these from the secured build using fictional data.
+- Saves repair requests with up to three optional JPEG, PNG, or WebP photos. The owner can prepare a draft manually or click **Analyze request** to get a structured recommendation.
+- Keeps the original request, AI recommendation, and editable owner draft separately. The owner sets the amount and can save, reject, approve, or assign the job. Rerunning analysis preserves existing owner edits.
+- Gives the technician a phone-width work order with the approved tasks, location, tools, materials, and instructions. The technician can report completion. Removing the assignment revokes access through a previously saved work-order link.
+- Persists jobs, photo blobs, and activity in SQLite. A utility backs up, verifies, and restores the job database to a new path.
 
 ## Architecture
 
@@ -33,27 +42,44 @@ flowchart LR
     order --> storage
 ```
 
-The API credential belongs on the server. Model output helps prepare the job and estimate. Owner approval and assignment govern the technician handoff. The application stores operational state and history locally so the owner can reconstruct what happened to a request.
+The Node.js server calls the OpenAI Responses API with the repair description and any photos. It requests strict JSON Schema output with `store: false` and validates the response before writing it to SQLite. The structured customer name, email, phone, and location fields stay in the job record. Free-text descriptions and photos are forwarded as entered. Failed analysis leaves the request available for manual review.
+
+## Approval and authorization
+
+Only the owner can open the queue, see intake photos, run analysis, edit prices, and approve or assign work. A technician session can read assigned, approved work orders and record completion. The server checks the role and current assignment on each request. The technician view includes the work location and approved instructions.
+
+Scrypt hashes protect the two local passwords. SQLite stores hashed session tokens and tracks sign-in attempts. Mutating dashboard forms use same-origin and CSRF checks. Job revisions prevent stale form submissions from overwriting updates. A per-job SQLite lock keeps concurrent analysis requests from replacing each other or the owner's edits.
 
 ## Verification
 
-| Build | Recorded result |
+| Build | Result |
 | --- | --- |
-| Original MVP, revision `12ff424` | Live OpenAI analysis verified using a synthetic image. |
-| Secured dashboard, revision `326ea5d` | Six automated security and workflow tests passed on Node.js 24.22.3 using simulated OpenAI responses. |
-| Secured dashboard manual walkthrough | Owner and technician permissions, phone-width technician workflow, assignment removal, and a local restore were checked with synthetic data. |
+| Original MVP, revision `12ff424` | The original build record reports a successful live OpenAI analysis with a synthetic image. |
+| Secured dashboard export, revision `326ea5d` | All six original security and workflow tests passed on Node.js 24.22.3 with mocked OpenAI responses. |
+| Curated repository | The same six tests passed on Node.js 24.22.3 with mocked OpenAI responses and synthetic data. A separate live call was outside this review. |
 
-These results come from the original build records. The curated repository needs a clean run of the six-test suite. The test command and test names will be added from that run.
+Run the same suite locally or in GitHub Actions.
+
+```sh
+node --test tests/check.mjs
+```
+
+The suite checks secure startup and role boundaries, throttling and session expiration, intake through completion and assignment revocation, the mocked OpenAI request and concurrency guard, intake gating, and SQLite migration and restore. It creates temporary databases and supplies a fake provider key internally.
 
 ## Local setup
 
-The secured branch was tested with Node.js 24.22.3. The original MVP was started with `node server.mjs`. The secured branch’s install, start, fixture seed, and test commands will be confirmed from its package files and reproduced in a clean checkout.
+Use Node.js **24.22.3** on macOS or Linux. The application and tests use built-in Node.js modules, including `node:sqlite`. There is no dependency installation step.
 
-For live local analysis, set your own `OPENAI_API_KEY` in the server’s environment using a locally ignored file or your shell. The tracked `.env.example` contains a placeholder. The automated suite uses simulated responses and should run without an API key.
+1. Run `node scripts/generate-login.mjs owner` and `node scripts/generate-login.mjs technician` in a private terminal. The generator provides a different password and hash for each account.
+2. Run `(umask 077; cp .env.example .env)` from the repository root. Set the two corresponding password hashes in `.env`. Use your own `OPENAI_API_KEY` and configure `GPS_OPENAI_MODEL` for live analysis, or leave the key blank to use the manual workflow.
+3. Run `node --env-file=.env server.mjs` and open `http://127.0.0.1:4321`. Sign in as `owner` and open **New request → Load sample details**. You can attach `tests/synthetic-door.png` to the fictional request.
+4. Enter a sample title, scope, labor estimate, work-order tasks, location, and amount. Approve and assign the job. In a separate browser session, sign in as `technician` to view the work order and record completion.
+
+By default, the server binds only to loopback and creates fresh job and session databases under `data/`. Use an absolute `GPS_DB_PATH` to use a different owner-only local directory.
 
 ## My role
 
-I defined the business workflow, including what the owner needs to approve and what the technician needs to see to complete a job. The build used AI-assisted code generation. The verified results above describe the application behavior recorded during development. Specific implementation and validation contributions should be confirmed from the build record before publication.
+I defined the workflow around two roles. I needed to review and approve scope and pricing, and the technician needed a clear work order on a phone. I directed the AI-assisted build around that handoff. The engineering checks above document what was tested and how to reproduce the automated suite.
 
 ## Production rollout
 
