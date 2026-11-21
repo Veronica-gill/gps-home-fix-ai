@@ -1,0 +1,22 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.p12
+
+# Local runtime state
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+uploads/
+node_modules/
+coverage/
+*.log
+.DS_Store
